@@ -1,0 +1,10 @@
+name: buddy_maps
+description: Builds Buddy's offline road tiles from OpenStreetMap extracts.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.12.0
+
+dev_dependencies:
+  test: ^1.25.0

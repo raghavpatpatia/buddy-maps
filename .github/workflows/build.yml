@@ -1,0 +1,49 @@
+name: Build India road tiles
+
+on:
+  schedule:
+    - cron: '0 2 * * 1' # every Monday 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tiles
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - run: dart pub get
+      - run: dart test
+      - run: dart compile exe bin/build_tiles.dart -o build_tiles
+
+      - name: Download India extract (Geofabrik)
+        run: curl -fsSL --retry 5 --retry-delay 30 -o india.osm.pbf https://download.geofabrik.de/asia/india-latest.osm.pbf
+
+      - name: Build tiles
+        run: ./build_tiles india.osm.pbf out India
+
+      - name: Publish to the "india" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view india >/dev/null 2>&1 || gh release create india \
+            --title "India road tiles" \
+            --notes "Weekly offline road tiles for the Buddy app. Map data © OpenStreetMap contributors, ODbL 1.0 (https://www.openstreetmap.org/copyright)."
+          # Tiles first and the manifest last, so a phone never reads a manifest that points at tiles not uploaded yet.
+          gh release upload india out/*.brt.gz --clobber
+          for a in $(gh release view india --json assets -q '.assets[].name'); do
+            case "$a" in
+              manifest.json) ;;
+              *) [ -f "out/$a" ] || gh release delete-asset india "$a" -y ;;
+            esac
+          done
+          gh release upload india out/manifest.json --clobber
